@@ -1,137 +1,117 @@
-import deepfilter as df
+import damselfly as df
 import torch
 import os
-import pickle as pkl
 import numpy as np
+import pickle as pkl
 import matplotlib.pyplot as plt
 
+def ChooseBestEpoch(checkpoint):
 
-temp = 10.0
+    with open(os.path.join(checkpoint, 'info.pkl'), 'rb') as infile:
+        info = pkl.load(infile)
+    
+    best_epoch = -1
+    best_acc = -1
+    for key, val in enumerate(info['val']):
+        #print(torch.mean(torch.tensor(info['val'][key])).item())
+        if torch.mean(torch.tensor(info['val'][key])).item() > best_acc:
+            best_acc = torch.mean(torch.tensor(info['val'][key])).item()
+            best_epoch = key
+    return best_epoch
+
+damselpath = '/home/az396/project/damselfly'
+saved_networks = '/home/az396/project/damselfly/training/checkpoints'
+datasets = '/home/az396/project/damselfly/data/datasets'
+results = '/home/az396/project/damselfly/analysis/results/confusion_matrices'
+
+train_temp = 20.0
 batchsize = 500
-checkpoint_date = '210604'
-checkpoint_dset = '210602_df1_ch3'
-checkpoint_model = 'df_conv6_fc2_3ch'
-model = df.models.df_conv6_fc2_3ch()
-checkpoint_domain = 'freq'
-class_split_type = 'pa'
-data_split = False
-epoch = 48
-#multiclass = True
-result_date = '210602'
+train_date = '210623'
+train_dset = 'df7'
+train_model = 'dfcnn'
+#train_epoch = 40
+threshold = 0.5
 
-if data_split:
-    result_dset = '210602_df2'
-else:
-    train_dset = '210602_df1_ch3'
-    test_dset = '210602_df2_test_ch3'
-    val_dset = '210602_df2_val_ch3'
+evaldata_date = '210622'
+evaldata_name = 'df7'
 
-saved_networks = '/home/az396/project/deepfiltering/training/checkpoints'
-datasets = '/home/az396/project/deepfiltering/data/datasets'
+result_date = '210623'
+result_name = f'{train_model}_temp{train_temp}_evaldata_{evaldata_name}_threshold{threshold}'
 
-if data_split:
-    #dataset = f'{checkpoint_domain}/{result_dset}_temp{temp}.pkl'
-    dataset = f'{checkpoint_domain}/{result_dset}_class_{class_split_type}_split_{data_split}_temp{temp}.pkl'
-else:
-    train_dataset = f'{checkpoint_domain}/{train_dset}_class_{class_split_type}_split_{data_split}_temp{temp}.pkl'
-    test_dataset = f'{checkpoint_domain}/{test_dset}_class_{class_split_type}_split_{data_split}_temp{temp}.pkl'
-    val_dataset = f'{checkpoint_domain}/{val_dset}_class_{class_split_type}_split_{data_split}_temp{temp}.pkl'
+n_class = 2
+nch = 3
 
-#checkpoint = f'date{checkpoint_date}_dset_name{checkpoint_dset}_temp{temp}_model{checkpoint_model}_domain_{checkpoint_domain}/epoch{epoch}.pth'
-#checkpoint = f'date{checkpoint_date}_dset_name{checkpoint_dset}_class_{class_split_type}_split_{data_split}_temp{temp}_model{checkpoint_model}_domain_{checkpoint_domain}/epoch{epoch}.pth'
-checkpoint = f'{checkpoint_date}_dset_name{checkpoint_dset}_class_{class_split_type}_split_{data_split}_temp{temp}_model{checkpoint_model}_domain_{checkpoint_domain}/epoch{epoch}.pth'
+conv_list = [
+                [
+                    [nch, 20], # in_f 
+                    [20, 20], # out_f
+                    [12, 12], # conv_kernels
+                    [1, 1], # dilations
+                    12 # maxpool_kernel + size
+                ],
+                [
+                    [20, 40],
+                    [40, 40],
+                    [6, 6],
+                    [1, 1],
+                    6
+                ],
+                [
+                    [40, 80],
+                    [80, 80],
+                    [3, 3],
+                    [1, 1],
+                    3
+                ]
+            ]
+            
+linear_list = [
+                [df.models.CalcConvMaxpoolOutputSize(conv_list, nch, 8192), 416],
+                [416, 213],
+                [0.5, 0.5]
+            ]
 
-results = '/home/az396/project/deepfiltering/analysis/results'
+model = df.models.DFCNN(n_class, nch, conv_list, linear_list)
 
-if data_split:
-    confusion_matrix_result_name = f'{result_date}_confusion_matrix_train_dset_{checkpoint_dset}_test_dset_{result_dset}_model_{checkpoint_model}_domain_{checkpoint_domain}_epoch{epoch}.pkl'
-else:
-    confusion_matrix_result_name = f'{result_date}_confusion_matrix_train_dset_{train_dset}_test_dset_{test_dset}_model_{checkpoint_model}_domain_{checkpoint_domain}_epoch{epoch}.pkl'
+checkpoints = f'{train_date}_dset_name_{train_dset}_temp{train_temp}_model_{train_model}'
 
+best_epoch = ChooseBestEpoch(os.path.join(saved_networks, checkpoints))
+#checkpoint = f'{train_date}_dset_name_{train_dset}_temp{train_temp}_model_{train_model}/epoch{train_epoch}.pth'
 
-
-
-# load and prep model
-
-model.load_state_dict(torch.load(os.path.join(saved_networks, checkpoint)))
+model.load_state_dict(torch.load(os.path.join(saved_networks, checkpoints, f'epoch{best_epoch}.pth')))
 model.eval()
 
-# load data at specified temperature
+path2data = os.path.join(damselpath, f'data/datasets/{evaldata_date}_{evaldata_name}.h5')
+
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 if device == torch.device("cuda:0"):
     print('Using GPU')
 else:
     print('Using CPU, this will be awhile.')
-    
-if data_split:
-
-    dataset = df.utils.LoadDataSetAndLabels(os.path.join(datasets, dataset))
-
-    X_train = dataset['train']['X']
-    X_test = dataset['test']['X']
-    X_val = dataset['val']['X']
-
-    y_train = dataset['train']['y']
-    y_test = dataset['test']['y']
-    y_val = dataset['val']['y']
-    
-else:
-    train_dataset = df.utils.LoadDataSetAndLabels(os.path.join(datasets, train_dataset))
-    test_dataset = df.utils.LoadDataSetAndLabels(os.path.join(datasets, test_dataset))
-    val_dataset = df.utils.LoadDataSetAndLabels(os.path.join(datasets, val_dataset))
-    
-    X_train = train_dataset['X']
-    X_test = test_dataset['X']
-    X_val = val_dataset['X']
-
-    y_train = train_dataset['y']
-    y_test = test_dataset['y']
-    y_val = val_dataset['y']
-
-#print(X.keys())
-####
 
 # confusion matrices for fixed threshold of 0.5
-gamma = 0.5
+confusionmatrix_list = df.utils.EvaluateModel(model, path2data, device, batchsize, threshold=threshold, nclass=n_class)
 
-train_matrix = df.utils.ConfusionMatrix(model, X_train, y_train, device, batchsize=batchsize)
-test_matrix = df.utils.ConfusionMatrix(model, X_test, y_test, device, batchsize=batchsize)
-val_matrix = df.utils.ConfusionMatrix(model, X_val, y_val, device, batchsize=batchsize)
+np.savez(os.path.join(results, f'{result_date}_{result_name}'), 
+            train = np.flip(confusionmatrix_list[0]), 
+            test = np.flip(confusionmatrix_list[2]),
+            val = np.flip(confusionmatrix_list[1]),
+        )
 
+for i in confusionmatrix_list:
+    print(i)
 
-
-print(train_matrix)
-print(test_matrix)
-print(val_matrix)
-
-conf_matrix_result = {'train': train_matrix, 'test': test_matrix, 'val': val_matrix}
-with open(os.path.join(results, confusion_matrix_result_name), 'wb') as outfile:
-    pkl.dump(conf_matrix_result, outfile)
-
-#for i, mat in enumerate(['train_mat.pkl', 'test_mat.pkl', 'val_mat.pkl']):
-#    with open(os.path.join(model_save_path, mat), 'wb') as outfile:
-#        pkl.dump(matrices[i], outfile)
+#print(confusionmatrix_list)
 
 
-#	# ROC curve, compute true positive rate and false positive rate
+#print(train_matrix)
+#print(test_matrix)
+#print(val_matrix)
 
-#	gammas = np.arange(0, 1, 0.05)
-#	tpr = []
-#	fpr = []
-#	for gamma in gammas:
-#		test_matrix = df.utils.ConfusionMatrix(model, X_test, y_test, device, threshold = gamma)
-
-#		tpr.append(test_matrix[0, 0] / test_matrix[0, :].sum())
-#		fpr.append(test_matrix[1, 0] / test_matrix[1, :].sum())
-
-#	rates = [tpr, fpr]
-#	for i, rate in enumerate(['tpr.pkl', 'fpr.pkl']):
-#		with open(os.path.join(model_save_path, rate), 'wb') as outfile:
-#			#print(model_save_path)
-#			pkl.dump(rates[i], outfile)
-#		
-
+#conf_matrix_result = {'train': train_matrix, 'test': test_matrix, 'val': val_matrix}
+#with open(os.path.join(results, confusion_matrix_result_name), 'wb') as outfile:
+#    pkl.dump(conf_matrix_result, outfile)
 
 
 

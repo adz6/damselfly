@@ -1,72 +1,92 @@
-import deepfilter as df
+import damselfly as df
 import torch
 import os
 import numpy as np
 
+damselpath = '/home/az396/project/damselfly'
 
-temps = [10.0]
-batchsize = 500
-epochs = 99
-ep_per_check = 3
+temps = [20.0]
+batchsize = 1000
+epochs = 50
+ep_per_check = 1
 lr = 1e-3
-date = '210604'
-model = df.models.df_conv6_fc2_3ch()
-modelname = 'df_conv6_fc2_3ch'
-domain = 'freq'
-train_dataset_name = '210602_df1_ch3_class_pa_split_False'
-val_dataset_name = '210602_df2_val_ch3_class_pa_split_False'
-binary_weight = np.array([7.0, 1.0])
+traindate = '210623'
+
+n_multiclass = 2
+nch = 3
+
+# define convolutional + maxpool layers
+conv_list = [
+                [
+                    [nch, 20], # in_f 
+                    [20, 20], # out_f
+                    [12, 12], # conv_kernels
+                    [1, 1], # dilations
+                    12 # maxpool_kernel + size
+                ],
+                [
+                    [20, 40],
+                    [40, 40],
+                    [6, 6],
+                    [1, 1],
+                    6
+                ],
+                [
+                    [40, 80],
+                    [80, 80],
+                    [3, 3],
+                    [1, 1],
+                    3
+                ]
+            ]
+            
+linear_list = [
+                [df.models.CalcConvMaxpoolOutputSize(conv_list, nch, 8192), 416],
+                [416, 213],
+                [0.5, 0.5]
+            ]
 
 
+model = df.models.DFCNN(n_multiclass, nch, conv_list, linear_list)
+modelname = 'dfcnn'
+
+binary = True
+binary_weight = np.array([5.0, 1.0])
+multi_weight = np.array([7.0, 1.0, 1.0, 1.0, 1.0])
+
+dataset_date = '210622'
+dataset_name = 'df7'
 
 
-dataset_path = '/home/az396/project/deepfiltering/data/datasets'
-train_path = '/home/az396/project/deepfiltering/training'
+path2data = os.path.join(damselpath, f'data/datasets/{dataset_date}_{dataset_name}.h5')
 
 
 for temp in temps:
 
-    train_name = train_dataset_name + f'_temp{temp}.pkl'
-    val_name = val_dataset_name + f'_temp{temp}.pkl'
     print('Starting temperature %.1f' % temp)
-    new_dir = f'{date}_dset_name{train_dataset_name}_temp{temp}_model{modelname}_domain_{domain}'
+    new_dir = f'{traindate}_dset_name_{dataset_name}_temp{temp}_model_{modelname}'
 
-    if not os.path.isdir(os.path.join(train_path + '/checkpoints', new_dir)):
-        os.mkdir(os.path.join(train_path + '/checkpoints', new_dir))
-    #if not os.path.isdir(os.path.join(train_path + '/data', new_dir)):
-    #    os.mkdir(os.path.join(train_path + '/data', new_dir))
+    if not os.path.isdir(os.path.join(damselpath, 'training/checkpoints', new_dir)):
+        os.mkdir(os.path.join(damselpath, 'training/checkpoints', new_dir))
 
 
     loop_model = model
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
     
-    loop_train_data_path = os.path.join(dataset_path, domain, train_name)
-    loop_val_data_path = os.path.join(dataset_path, domain, val_name)
-    
-    train_dset_and_labels = df.utils.LoadDataSetAndLabels(loop_train_data_path)
-    val_dset_and_labels = df.utils.LoadDataSetAndLabels(loop_val_data_path)
-    
-    #print(train_dset_and_labels.keys())
-    X_train = train_dset_and_labels['X']
-    y_train = train_dset_and_labels['y']
-    
-    X_val = val_dset_and_labels['X']
-    y_val = val_dset_and_labels['y']
-    
-    checkpoint_save_path = os.path.join(train_path + '/checkpoints', new_dir)
+    checkpoint_save_path = os.path.join(damselpath, 'training/checkpoints', new_dir)
     df.utils.TrainModel(
                 loop_model, 
-                X_train, 
-                y_train, 
-                X_val, 
-                y_val, 
+                path2data, 
                 device, 
                 epochs, 
                 batchsize, 
                 lr, 
                 checkpoint_save_path,
-                epochs_per_checkpoint = ep_per_check, 
-                binary_weight = binary_weight
+                epochs_per_checkpoint = ep_per_check,
+                binary = binary,
+                binary_weight = binary_weight,
+                multiclass_weight = multi_weight
                         )
     
 

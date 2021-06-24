@@ -1,4 +1,4 @@
-import deepfilter as df
+import damselfly as df
 import torch
 import os
 import pickle as pkl
@@ -8,23 +8,24 @@ import matplotlib.pyplot as plt
 ### Configure ###
 temp = 10.0
 batchsize = 500
-checkpoint_date = '210604'
-checkpoint_dset = '210602_df1_ch3'
-checkpoint_model = 'df_conv6_fc2_3ch'
+checkpoint_date = '210607'
+checkpoint_dset = '210607_df1_multiclass_ch3'
+checkpoint_model = 'df_conv6_fc2_multiclass_3ch'
 checkpoint_domain = 'freq'
 class_split_type = 'pa'
 split = False
-epoch = 33
-result_date = '210604'
+epoch = 54
+result_date = '210608'
 
-result_dset = '210602_df2_test_ch3'
+result_dset = '210607_df2_multiclass_test_ch3'
 
-model = df.models.df_conv6_fc2_3ch()
+N_multi = 5
+model = df.models.df_conv6_fc2_multiclass_3ch(N_multi)
 
 ### NO CHANGES BELOW HERE ###
 
-saved_networks = '/home/az396/project/deepfiltering/training/checkpoints'
-datasets = '/home/az396/project/deepfiltering/data/datasets'
+saved_networks = '/home/az396/project/damselfly/training/checkpoints'
+datasets = '/home/az396/project/damselfly/data/datasets'
 #dataset = f'{checkpoint_domain}/{result_dset}_temp{temp}.pkl'
 dataset = f'{checkpoint_domain}/{result_dset}_class_{class_split_type}_split_{split}_temp{temp}.pkl'
 
@@ -32,7 +33,7 @@ dataset = f'{checkpoint_domain}/{result_dset}_class_{class_split_type}_split_{sp
 #checkpoint = f'date{checkpoint_date}_dset_name{checkpoint_dset}_class_{class_split_type}_split_{split}_temp{temp}_model{checkpoint_model}_domain_{checkpoint_domain}/epoch{epoch}.pth'
 checkpoint = f'{checkpoint_date}_dset_name{checkpoint_dset}_class_{class_split_type}_split_{split}_temp{temp}_model{checkpoint_model}_domain_{checkpoint_domain}/epoch{epoch}.pth'
 
-results = '/home/az396/project/deepfiltering/analysis/results'
+results = '/home/az396/project/damselfly/analysis/results'
 ROC_result_name = f'{result_date}_roc_train_dset_{checkpoint_dset}_test_dset_{result_dset}_model_{checkpoint_model}_domain_{checkpoint_domain}_epoch{epoch}.pkl'
 
 # load and prep model

@@ -1,19 +1,19 @@
-import deepfilter as df
+import damselfly as df
 import numpy as np
 import pickle as pkl
 import os
 import matplotlib.pyplot as plt
 
 temp = 10.0
-result_date = '210604'
-result_train_dset = '210602_df1_ch3'
-result_test_dset = '210602_df2_test_ch3'
-result_model = 'df_conv6_fc2_3ch'
+result_date = '210608'
+result_train_dset = '210607_df1_multiclass_ch3'
+result_test_dset = '210607_df2_multiclass_test_ch3'
+result_model = 'df_conv6_fc2_multiclass_3ch'
 result_domain = 'freq'
-result_epoch = 33
+result_epoch = 54
 
-plot_date = '210604'
-mean_only = True
+plot_date = '210608'
+mean_only = False
 
 
 #saved_networks = '/home/az396/project/deepfiltering/training/checkpoints'
@@ -21,8 +21,8 @@ mean_only = True
 #dataset = f'{checkpoint_domain}/{checkpoint_dset}_temp{temp}.pkl'
 #checkpoint = f'date{checkpoint_date}_dset_name{checkpoint_dset}_temp{temp}_model{checkpoint_model}_domain_{checkpoint_domain}/epoch{epoch}.pth'
 ROC_result_name = f'{result_date}_roc_train_dset_{result_train_dset}_test_dset_{result_test_dset}_model_{result_model}_domain_{result_domain}_epoch{result_epoch}.pkl'
-results = '/home/az396/project/deepfiltering/analysis/results'
-plots = '/home/az396/project/deepfiltering/analysis/plotting/plots'
+results = '/home/az396/project/damselfly/analysis/results'
+plots = '/home/az396/project/damselfly/analysis/plotting/plots'
 
 # load the matrices,
 with open(os.path.join(results, ROC_result_name), 'rb') as infile:

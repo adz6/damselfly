@@ -1,20 +1,20 @@
 import numpy as np
 import matplotlib.pyplot
 import pickle as pkl
-import deepfilter as df
+import damselfly as df
 import os
 
 domain = 'freq'
 split_data = False
 Nch = 3
-raw_data_path = '/home/az396/project/deepfiltering/data/raw_summed_signals'
-raw_data_name = f'{domain}/210528_df1.pkl'
+raw_data_path = '/home/az396/project/damselfly/data/raw_summed_signals'
+raw_data_name = f'{domain}/210528_df2.pkl'
 
-dataset_date = '210602'
-dataset_type = 'df1'
+dataset_date = '210607'
+dataset_type = 'df2_multiclass_val'
 multiclass_parameter = 'pa'
-save_data_path = '/home/az396/project/deepfiltering/data/datasets'
-binary = True
+save_data_path = '/home/az396/project/damselfly/data/datasets'
+binary = False
 
 
 with open(os.path.join(raw_data_path, raw_data_name), 'rb') as infile:
@@ -33,11 +33,12 @@ for temp in noise_temps:
                                                         domain=domain, 
                                                         n_copies_train=25, 
                                                         n_copies_test=10,
-                                                        n_copies=16,
+                                                        n_copies=8,
                                                         percent_noise=0.2,
                                                         split=split_data,
                                                         binary=binary,
-                                                        Nch=Nch
+                                                        Nch=Nch, 
+                                                        N_multiclass = 4
                                                       )
     
     #print(data_set['train']['y'].sum(dim=0))

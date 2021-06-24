@@ -256,20 +256,68 @@ def GenerateLabeledMulticlassDataset(summed_signals, path, class_type = 'pa', n_
                             })
     return data_set
     
-def AddNoise(data, T, domain = 'time', N_samp = 8192):
+def AddNoise(data, T):
 
     size = data.size
     shape = data.shape
-    var = 1.38e-23 * 200e6 * 50 * T
+    var = 1.38e-23 * 200e6 * 50 * T / 8192
     
     noise = np.random.multivariate_normal([0, 0], np.eye(2) * var / 2, size)
     noise = noise[:, 0] + 1j * noise[:, 1]
     
-    if domain == 'freq':
-        return data + (noise.reshape(shape))
-    else:
-        return data + noise.reshape(shape)
+
+    return data + noise.reshape(shape)
         
     
+
+class DFDataset(torch.utils.data.Dataset):
+
+    # class to interface hdf5 datafile with pytorch dataloader class
+    # specify the path to the h5 file and the dataset type i.e. 'train', 'test', or 'val'
+    # option to normalize the data to [-1, 1] (default)
+    # loads data into RAM (torch tensor) automatically, could be changed to load lazily
     
+    def __init__(self, filepath, dset_type, norm=True):
+        super().__init__
+        
+        self.data = []
+        self.label = []
+        self.norm = norm
+        self._load_data(filepath, dset_type, self.norm)
+        
+        
+    def __get_item__(self, index):
+        
+        x = self.data['data'][index, :, :]
+        y = self.data['label'][index]
+        
+        return (x,y)
+    
+    def __len__(self):
+        return len(self.data['label'][:])
+
+    def _load_data(self, filepath, dset_type, norm):
+    
+        h5file = h5py.File(filepath, 'r')
+        h5group = h5file[dset_type]
+        
+        for key in h5group.keys():
+
+            if key == 'data':
+
+                if norm:
+                    self.data = torch.tensor(self._norm_data(h5group[key][:, :, :]), dtype=torch.float)
+                else:
+                    self.data = torch.tensor(h5group[key][:, :, :], dtype=torch.float)
+                
+            elif key == 'label':
+                self.label = torch.tensor(h5group[key][:], dtype=torch.long)
+                
+        h5file.close()
+        
+    def _norm_data(self, data):
+        norm = (1 / np.max(abs(data), 2)).reshape((data.shape[0], data.shape[1], 1)).repeat(data.shape[2], axis=2)
+        return norm * data
+
+
 

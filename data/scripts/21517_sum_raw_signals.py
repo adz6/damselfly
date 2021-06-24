@@ -2,9 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import pickle as pkl
-import deepfilter as df
+import damselfly as df
 
-path_to_eggs = '/home/az396/project/sims/sim_data/210528_deepfilter_set1'
+path_to_eggs = '/home/az396/project/sims/sim_data/210615_test_time'
 v_range = 5.5e-8
 slice_num = 0
 N_start = 1500
@@ -37,6 +37,11 @@ for i, sim in enumerate(list_sim):
         except:
             print(f'Resubmit: {sim}')
             continue
+        print(len(parsed_egg[0, :]))
+        fig=plt.figure()
+        ax=plt.subplot(1,1,1)
+        ax.plot(np.real(parsed_egg[0, 1500:8192 + 1500]))
+        plt.savefig('/home/az396/project/damselfly/test.png')
         egg_time_series = parsed_egg[:, N_start : N_start + N_slice]
         egg_signal = df.data.SumSignals(egg_time_series)
         
@@ -50,9 +55,9 @@ for i, sim in enumerate(list_sim):
 	
 
 #data = {'E': energies, 'pa': pa, 'r': rads, 'x': signals}
-data = {'E': energies, 'pa': pa, 'r': rads, 'z': z_ax, 'x': signals}
-with open(f'/home/az396/project/deepfiltering/data/raw_summed_signals/210528_df1.pkl', 'wb') as outfile:
-	pkl.dump(data, outfile)
+#data = {'E': energies, 'pa': pa, 'r': rads, 'z': z_ax, 'x': signals}
+#with open(f'/home/az396/project/deepfiltering/data/raw_summed_signals/210528_df1.pkl', 'wb') as outfile:
+#	pkl.dump(data, outfile)
 	#if i % 50 == 49:
 	#    print('Done with %.2f' % ((i + 1) / len(list_sim)))
 

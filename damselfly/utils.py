@@ -8,28 +8,44 @@ import torch.optim as optim
 import pickle as pkl
 import os
 import time
+import damselfly as df
 
 # output size for 1d convolution
 # L_out = [[L_in + 2 * padding - dilation * (kernel_size - 1) - 1]/stride + 1]
 
-def TrainModel(model, train_data, train_labels, val_data, val_labels, device, 
-        epochs, batchsize, learning_rate, model_save_path, epochs_per_checkpoint=5,binary_weight = np.array([7.0, 1.0])):
+def TrainModel(model, datapath, device, epochs, batchsize, learning_rate, model_save_path, 
+                epochs_per_checkpoint=5,binary=True, binary_weight = np.array([7.0, 1.0]), multiclass_weight = np.array([7.0, 1.0])):
     
     #binary_weight = np.array([1.1, 1.0])
-    binary_weight = binary_weight
-    bce_weight = torch.tensor(
-                            binary_weight,
-                             device=device, dtype=torch.float
-                            )
-    ##bce_weight = torch.tensor([7.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], device=device)
+    if binary:
+        bce_weight = torch.tensor(
+                                binary_weight,
+                                 device=device, dtype=torch.float
+                                )
+    else:
+        bce_weight = torch.tensor(
+                                multiclass_weight,
+                                 device=device, dtype=torch.float
+                                )
+                                
+                                
     if device == torch.device("cuda:0"):
         print('Model moved to GPU')
         model.to(device)
-        #bce_weight.to(device)
 
-    # normalization
-    train_data = NormalizeData(train_data)
-    val_data = NormalizeData(val_data)
+    train_data = df.data.DFDataset(datapath, 'train')
+    val_data = df.data.DFDataset(datapath, 'val')
+
+    train_dataloader = torch.utils.data.DataLoader(
+                                                    torch.utils.data.TensorDataset(train_data.data, train_data.label),
+                                                    batchsize,
+                                                    shuffle=True
+                                                    )
+    val_dataloader = torch.utils.data.DataLoader(
+                                                    torch.utils.data.TensorDataset(val_data.data, val_data.label),
+                                                    batchsize,
+                                                    shuffle=True
+                                                    )
 
     # track training
     train_loss = {}
@@ -37,11 +53,9 @@ def TrainModel(model, train_data, train_labels, val_data, val_labels, device,
     val_accuracy_per_epoch = {}
 
     # define loss function and optimizer
-    #print(bce_weight)
     criterion = torch.nn.CrossEntropyLoss(weight = bce_weight, reduction = 'mean')
     optimizer = torch.optim.Adam(model.parameters(), lr = learning_rate)
-    #optimizer = torch.optim.SGD(model.parameters(), lr = learning_rate, momentum=0)
-    #optimizer = torch.optim.Adagrad(model.parameters(), lr = learning_rate)
+
 
     for ep in range(epochs):
 
@@ -50,48 +64,51 @@ def TrainModel(model, train_data, train_labels, val_data, val_labels, device,
         train_accuracy.update({ep: []})
         val_accuracy_per_epoch.update({ep: []})
 
-        # random permutation of train data
-        n_rand = np.random.permutation(train_data.shape[0])
-        train_data = train_data[n_rand, :, :]
-        train_labels = train_labels[n_rand]
+        ## random permutation of train data
+        #n_rand = np.random.permutation(train_data.shape[0])
+        #train_data = train_data[n_rand, :, :]
+        #train_labels = train_labels[n_rand]
         t1 = time.perf_counter_ns()
-        for i, batch in enumerate(torch.split(train_data, batchsize, dim=0)):
-            batch_labels = torch.split(train_labels, batchsize, dim=0)[i]
+        
+        nbatch = 1
+        for batch, labels in train_dataloader:
+            #batch_labels = torch.split(train_labels, batchsize, dim=0)[i]
             
             if device == torch.device("cuda:0"):
                 batch = batch.to(device)
-                batch_labels = batch_labels.to(device)
+                labels = labels.to(device)
 
             optimizer.zero_grad()
 
             output = model(batch)
 
-            loss = criterion(output, batch_labels)
+            loss = criterion(output, labels)
             loss.backward()
             optimizer.step()
 
             train_loss[ep].append(loss.item())
 
-            batch_accuracy = CalculateAccuracy(output, batch_labels)
+            batch_accuracy = CalculateAccuracy(output, labels)
             train_accuracy[ep].append(batch_accuracy)
 
             # monitor training
-            print('| %d | %d | %.3f | %.3f |' % ((ep + 1), i, loss.item(), batch_accuracy))
+            print('| %d | %d | %.3f | %.3f |' % ((ep + 1), nbatch, loss.item(), batch_accuracy))
+            nbatch += 1
 
         t2 = time.perf_counter_ns()
         print(f'Epoch time: {np.round((t2-t1)*1e-9, 2)} s')
         # compute validation accuracy after 1 epoch
         batch_lengths = []
-        for i, batch in enumerate(torch.split(val_data, batchsize, dim=0)):
-            batch_labels = torch.split(val_labels, batchsize, dim=0)[i]
+        for batch, labels in val_dataloader:
+            #batch_labels = torch.split(val_labels, batchsize, dim=0)[i]
 
             if device == torch.device("cuda:0"):
                 batch = batch.to(device)
-                batch_labels = batch_labels.to(device)
+                labels = labels.to(device)
             
             val_out = model(batch)
             
-            val_acc = CalculateAccuracy(val_out, batch_labels)
+            val_acc = CalculateAccuracy(val_out, labels)
             val_accuracy_per_epoch[ep].append(val_acc)
 
         print('Completed epoch %d. Mean validation accuracy: %.3f' % ((ep + 1), torch.mean(torch.as_tensor(val_accuracy_per_epoch[ep]))))
@@ -107,30 +124,56 @@ def TrainModel(model, train_data, train_labels, val_data, val_labels, device,
             pkl.dump(info, outfile)
 
 
-def EvaluateModel(model, testData, NClass=2):
+def EvaluateModel(model, datapath, device, batchsize, threshold=0.50, nclass=2):
 
-  confusionMatrix = np.zeros((NClass, NClass))
+    if device == torch.device("cuda:0"):
+        print('Model moved to GPU')
+        model.to(device)
+        
+        
+    train_data = df.data.DFDataset(datapath, 'train')
+    val_data = df.data.DFDataset(datapath, 'val')
+    test_data = df.data.DFDataset(datapath, 'test')
 
-  for i, testExample in enumerate(testData):
-
-    features, labels = testExample
-
-    labels=np.flip(labels)
-    labels = list(np.argwhere(labels==1)[0])
-
-    features = torch.tensor(features, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
-    labels = torch.tensor(labels, dtype=torch.long)
-
-    outputs = model(features)
-
-    predicted_labels = F.softmax(outputs)
-
-    predicted_label = torch.argmax(predicted_labels).item()
-    ground_truth = labels.item()
-
-    confusionMatrix[ground_truth, predicted_label] += 1
-
-  return confusionMatrix
+    train_dataloader = torch.utils.data.DataLoader(
+                                                    torch.utils.data.TensorDataset(train_data.data, train_data.label),
+                                                    batchsize,
+                                                    shuffle=True
+                                                    )
+    val_dataloader = torch.utils.data.DataLoader(
+                                                    torch.utils.data.TensorDataset(val_data.data, val_data.label),
+                                                    batchsize,
+                                                    shuffle=True
+                                                    )
+    test_dataloader = torch.utils.data.DataLoader(
+                                                    torch.utils.data.TensorDataset(test_data.data, test_data.label),
+                                                    batchsize,
+                                                    shuffle=True
+                                                    )
+    confusionmatrix_list = []
+    for i, dataloader in enumerate([train_dataloader, val_dataloader, test_dataloader]):
+    
+        confusionmatrix = np.zeros((nclass, nclass))
+        for batch, labels in dataloader:
+            
+            if device == torch.device("cuda:0"):
+                batch = batch.to(device)
+            
+            out = F.softmax(model(batch), dim=1)
+            
+            for j in range(labels.shape[0]):
+                predict_ind = torch.where(out[j, :] >= threshold)[0].to('cpu')
+            
+                predicted_classes = np.zeros(nclass)
+                predicted_classes[predict_ind] = 1
+                #print(predicted_classes)
+                for n in range(len(predicted_classes)):
+                    if predicted_classes[n] == 1:
+                        confusionmatrix[labels[j], n] += 1
+                        
+        confusionmatrix_list.append(confusionmatrix)
+    
+    return confusionmatrix_list
 
 def LoadDataSetAndLabels(path):
 
@@ -208,14 +251,7 @@ def ConfusionMatrix(model, X, y, device, batchsize = 1000, threshold=0.50):
     unique_class = y.unique()
     N_class = len(unique_class)
     
-    # move noise class (0) to the be the last class in the list
-    #iclass = []
-    #for n in range(N_class - 1):
-    #    iclass.append(n + 1)
-    #iclass.append(0)
-    #iclass = np.array(iclass)
-    
-    #print(iclass)
+
     
     confusion_matrix = np.zeros((N_class, N_class))
 
